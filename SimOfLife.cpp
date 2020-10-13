@@ -1,10 +1,31 @@
+// --------------------------------------------
+// without structs:
+// Results (Release x64):
+// -----
+// computation : 7043.44ms - 7394.76ms
+// finalization : 871.228ms - 917.633ms
+// setup : 330.595ms - 482.229ms
+
+// Results (Release x86):
+// -----
+// computation :  8229.94ms - 8373.14ms
+// finalization : 822.842ms - 876.652ms
+// setup : 517.811ms - 546.773ms
+
+// --------------------------------------------
+// with structs:
+// not even close...
+// --------------------------------------------
+
 // TODOs:
 // - optimizations :p
 // - read cmd args with getopt port
 
+// major bottleneck optimizations:
+// - faster memcpy for structs
+
 // minor optimizations:
 // - no if()'s to better perform on GPU -> val = TRUE_COND * val + FALSE_CON * val
-// - use globals (yikes!) or better a class to init temp variables (offsets, ...) once
 // - read whole DataBlob and set cells from there instead of ifstream.get(c);
 // - use classic C file operations?
 // - using charptrs everywhere instead of array indexing
@@ -12,6 +33,7 @@
 
 // done:
 // - input x and y instead of index to minimize calculations -> saves about 1 sec for 10k cells
+// - use structs to init temp variables (offsets, ...) once rather than globals (yikes!) --> need more memory thus memcpy is much slower!
 
 #include <stdlib.h> // EXIT_SUCCESS
 #include <iostream> // memset
@@ -22,7 +44,7 @@
 //#define DEBUG_OUT
 //#define USE_STEPS
 //#define SHOW_GENS
-#define USE_STRUCT
+//#define USE_STRUCT
 
 #include "Timing.h"
 
@@ -61,7 +83,8 @@ void printCells()
     system("CLS"); // TODO: remove windows specific
 #endif
 
-    for (size_t i = 0; i < total_elem_count; ++i) {
+    for (size_t i = 0; i < total_elem_count; ++i)
+    {
         if (i % w == 0) std::cout << std::endl;
 
 #ifdef DEBUG_OUT
@@ -75,18 +98,17 @@ void printCells()
     }
 }
 
-void setCellState(size_t index, size_t x, size_t y, bool alive = true)
+void setCellState(unsigned char* ptr_cell, size_t x, size_t y, bool alive = true)
 {
     // set cell value
-    unsigned char* ptr_cell = cells + index;
     //if (alive)  *(ptr_cell) |= STATE_ALIVE;
     //else        *(ptr_cell) &= ~STATE_ALIVE;
     *(ptr_cell) ^= STATE_ALIVE; // just toggle -> no if, saves about 500 ms
 
+    // attempt to spare som ifs... not efficient
+    //int status = ((alive == 1 || alive == -1) * STATE_ALIVE) + (alive == 0) * *(ptr_cell);
+
     // calculate neighbours -> wrap-around at borders: { 0, 0 } is a neighbor of { m, n } on a m x n sized grid
-
-    //std::cout << "setting cell " << index << " (" << x << ", " << y << ") -> " << (alive ? "x" : ".") << std::endl;
-
     // offsets in x,y direction
     int xOffLeft = (x == 0) ? w - 1 : -1;
     int xOffRight = (x == (w - 1)) ? -(w - 1) : 1;
@@ -94,7 +116,6 @@ void setCellState(size_t index, size_t x, size_t y, bool alive = true)
     int yOffBot = (y == (h - 1)) ? -((int)total_elem_count - w) : w; // need to cast to int because of negative sign
 
     // add bits for neighbour counts
-    //int val = (alive) ? 0x02 : -0x02;
     int val = (alive) * 0x02 + (!alive) * -0x02; // 9,136
     *(ptr_cell + yOffTop + xOffLeft) += val;
     *(ptr_cell + yOffTop) += val;
@@ -108,10 +129,9 @@ void setCellState(size_t index, size_t x, size_t y, bool alive = true)
 
 #ifdef USE_STRUCT
 // minor modifications for struct: using +1 to add, -1 to sub, 0 just clears the value
-void setCellState(size_t index, size_t x, size_t y, int alive)
+void setCellState(Cell* ptr_cell, int alive)
 {
     // set cell value
-    Cell* ptr_cell = CELLS + index;
     //if (alive > 0)        ptr_cell->value |= STATE_ALIVE;
     //else if (alive < 0)   ptr_cell->value &= ~STATE_ALIVE;
     ptr_cell->value ^= STATE_ALIVE; // just toggle -> no if, saves about 500 ms
@@ -156,7 +176,7 @@ void readCharFromFile(const char* filePath)
 
 #ifdef USE_STRUCT
         CELLS = new Cell[total_elem_count];
-        //memset(cells, 0, total_elem_count); // not needed if setting all values
+        //memset(cells, 0, total_elem_count); // not needed if init all values
 #else
         cells = new unsigned char[total_elem_count];
         memset(cells, 0, total_elem_count);
@@ -192,7 +212,7 @@ void readCharFromFile(const char* filePath)
 
                 if (c == 'x')  // only need to set alive cells, otherwise stay 0
                 {
-                    setCellState(idx, x, y, (c == 'x') ? 1 : -1);
+                    setCellState(cell, 1);
                 }
 #else
                 //std::cout << "read c: " << c << " for index: " << idx << std::endl;
@@ -200,7 +220,7 @@ void readCharFromFile(const char* filePath)
                 {
                     x = idx % w;
                     y = idx / w;
-                    setCellState(idx, x, y);
+                    setCellState(cells + idx, x, y, 1);
                 }
 #endif
 
@@ -289,6 +309,7 @@ int main(int argc, char** argv)
     // make a temp copy of cells to read from without interfering
 #ifdef USE_STRUCT
     Cell* oldCells = new Cell[total_elem_count];
+    memcpy(oldCells, CELLS, total_elem_count * sizeof(Cell)); // need set neighbours
 #else
     unsigned char* oldCells = new unsigned char[total_elem_count];
 #endif
@@ -355,11 +376,11 @@ int main(int argc, char** argv)
     {
         // copy current state in oldstate
 #ifdef USE_STRUCT
-        //memcpy(oldCells, CELLS, total_elem_count * sizeof(Cell)); // for 10 Mio cells this takes about 15 seconds, on x64 almost 30 O_O
-        //std::swap(oldCells, CELLS); // TODO: not possible if using global variable
+        memcpy(oldCells, CELLS, total_elem_count * sizeof(Cell)); // for 10 Mio cells this takes about 15 seconds, on x64 almost 30 O_O
+        //std::swap(oldCells, CELLS); // swap could improve performance bc just switch working array but is (yet) not usable because setting neighbours as diff
 #else
         memcpy(oldCells, cells, total_elem_count);
-        //std::swap(oldCells, cells); // TODO: not possible if using global variable
+        //std::swap(oldCells, cells); // swap could improve performance bc just switch working array but is (yet) not usable because setting neighbours as diff
 #endif
 
         // calculate next step
@@ -393,25 +414,29 @@ int main(int argc, char** argv)
                                             // --> which means, as every cell has to be touched no need for memcpying the whole array
 
                 countNeighbours = (value >> 1);
-                //assert(countNeighbours >= 0 && countNeighbours <= 8);
+
+                // refactored to not using ifs and set value to 1 (new) -1 (die) 0 (let)
+                // --> is a few seconds slower than ifs
+                /*bool born = !(value & STATE_ALIVE) && (countNeighbours == 3); // Ah, ha, ha, ha, stayin' alive, stayin' alive!
+                bool die = (value & STATE_ALIVE) && !(countNeighbours == 2 || countNeighbours == 3); // x_x
+                setCellState(cells + idx, i, j, (born * 1 + die * -1) != 0);*/
 
                 if (value & STATE_ALIVE) {
                     // cell is alive -> check if dies (less than 2 or more than 3 neighbours)
                     if (countNeighbours == 2 || countNeighbours == 3) continue; // Ah, ha, ha, ha, stayin' alive, stayin' alive!
 
 #ifdef USE_STRUCT
-                    setCellState(idx, i, j, -1); // x_x
+                    setCellState((CELLS + idx), -1); // x_x
 #else
-                    setCellState(idx, i, j, false); // x_x
+                    setCellState(cells + idx, i, j, false); // x_x
 #endif
                 }
                 else if (countNeighbours == 3) // cell was dead and has enough neighbours -> newborn <3
                 {
 #ifdef USE_STRUCT
-                    setCellState(idx, i, j, +1);
+                    setCellState((CELLS + idx), +1);
 #else
-
-                    setCellState(idx, i, j);
+                    setCellState(cells + idx, i, j, true);
 #endif
                 }
             }
