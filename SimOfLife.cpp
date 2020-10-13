@@ -1,0 +1,451 @@
+// TODOs:
+// - optimizations :p
+// - read cmd args with getopt port
+
+// minor optimizations:
+// - no if()'s to better perform on GPU -> val = TRUE_COND * val + FALSE_CON * val
+// - use globals (yikes!) or better a class to init temp variables (offsets, ...) once
+// - read whole DataBlob and set cells from there instead of ifstream.get(c);
+// - use classic C file operations?
+// - using charptrs everywhere instead of array indexing
+// - using array as param instead of globals for easy swap between read/work buffer
+
+// done:
+// - input x and y instead of index to minimize calculations -> saves about 1 sec for 10k cells
+
+#include <stdlib.h> // EXIT_SUCCESS
+#include <iostream> // memset
+#include <fstream> // ifstream
+#include <string> // getline
+#include <cassert>  // assert
+
+//#define DEBUG_OUT
+//#define USE_STEPS
+//#define SHOW_GENS
+#define USE_STRUCT
+
+#include "Timing.h"
+
+// each cell is represented as a byte:
+//      LSB is state 0 = dead, 1... alive
+//      other bits are number of neighbours
+
+#define STATE_ALIVE 0x01
+
+int w;
+int h;
+size_t total_elem_count;
+size_t generations = 250;
+unsigned char* cells;
+
+#ifdef USE_STRUCT
+struct Cell
+{
+    char value = 0;
+    // save ptr to all neighbours
+    Cell* topLeft = nullptr;
+    Cell* top = nullptr;
+    Cell* topRight = nullptr;
+    Cell* left = nullptr;
+    Cell* right = nullptr;
+    Cell* botLeft = nullptr;
+    Cell* bot = nullptr;
+    Cell* botRight = nullptr;
+};
+Cell* CELLS;
+#endif
+
+void printCells()
+{
+#ifdef _WIN32
+    system("CLS"); // TODO: remove windows specific
+#endif
+
+    for (size_t i = 0; i < total_elem_count; ++i) {
+        if (i % w == 0) std::cout << std::endl;
+
+#ifdef DEBUG_OUT
+        char val = cells[i];
+        if (val == 0) std::cout << ".";
+        else if (val & STATE_ALIVE) std::cout << "x"; // cell is alive
+        else std::cout << ((val >> 1) + 0); // cell is dead and has x neighbours
+#else
+        std::cout << ((cells[i] & STATE_ALIVE) ? "x" : ".");
+#endif
+    }
+}
+
+void setCellState(size_t index, size_t x, size_t y, bool alive = true)
+{
+    // set cell value
+    unsigned char* ptr_cell = cells + index;
+    //if (alive)  *(ptr_cell) |= STATE_ALIVE;
+    //else        *(ptr_cell) &= ~STATE_ALIVE;
+    *(ptr_cell) ^= STATE_ALIVE; // just toggle -> no if, saves about 500 ms
+
+    // calculate neighbours -> wrap-around at borders: { 0, 0 } is a neighbor of { m, n } on a m x n sized grid
+
+    //std::cout << "setting cell " << index << " (" << x << ", " << y << ") -> " << (alive ? "x" : ".") << std::endl;
+
+    // offsets in x,y direction
+    int xOffLeft = (x == 0) ? w - 1 : -1;
+    int xOffRight = (x == (w - 1)) ? -(w - 1) : 1;
+    int yOffTop = (y == 0) ? total_elem_count - w : -w;
+    int yOffBot = (y == (h - 1)) ? -((int)total_elem_count - w) : w; // need to cast to int because of negative sign
+
+    // add bits for neighbour counts
+    //int val = (alive) ? 0x02 : -0x02;
+    int val = (alive) * 0x02 + (!alive) * -0x02; // 9,136
+    *(ptr_cell + yOffTop + xOffLeft) += val;
+    *(ptr_cell + yOffTop) += val;
+    *(ptr_cell + yOffTop + xOffRight) += val;
+    *(ptr_cell + xOffLeft) += val;
+    *(ptr_cell + xOffRight) += val;
+    *(ptr_cell + yOffBot + xOffLeft) += val;
+    *(ptr_cell + yOffBot) += val;
+    *(ptr_cell + yOffBot + xOffRight) += val;
+}
+
+#ifdef USE_STRUCT
+// minor modifications for struct: using +1 to add, -1 to sub, 0 just clears the value
+void setCellState(size_t index, size_t x, size_t y, int alive)
+{
+    // set cell value
+    Cell* ptr_cell = CELLS + index;
+    //if (alive > 0)        ptr_cell->value |= STATE_ALIVE;
+    //else if (alive < 0)   ptr_cell->value &= ~STATE_ALIVE;
+    ptr_cell->value ^= STATE_ALIVE; // just toggle -> no if, saves about 500 ms
+
+    // add bits for neighbour counts
+    int val = (alive > 0) * 0x02 + (alive < 0) * -0x02;
+    ptr_cell->topLeft->value += val;
+    ptr_cell->top->value += val;
+    ptr_cell->topRight->value += val;
+    ptr_cell->left->value += val;
+    ptr_cell->right->value += val;
+    ptr_cell->botLeft->value += val;
+    ptr_cell->bot->value += val;
+    ptr_cell->botRight->value += val;
+}
+#endif
+
+void readCharFromFile(const char* filePath)
+{
+    std::cout << "read file: " << filePath << "..." << std::endl;
+    std::ifstream in(filePath);
+    if (in.is_open())
+    {
+        std::string line;
+        std::getline(in, line);
+        std::cout << "read line " << line << std::endl;
+        // TODO: better split
+        size_t pos = line.find(',');
+        if (pos != std::string::npos)
+        {
+            w = std::stoi(line.substr(0, pos));
+            h = std::stoi(line.substr(pos + 1));
+        }
+        else // use default values
+        {
+            w = 1000;
+            h = 250;
+        }
+
+        total_elem_count = w * h;
+        std::cout << "total: " << total_elem_count << ", w: " << w << ", h: " << h << " gen: " << generations << std::endl;
+
+#ifdef USE_STRUCT
+        CELLS = new Cell[total_elem_count];
+        //memset(cells, 0, total_elem_count); // not needed if setting all values
+#else
+        cells = new unsigned char[total_elem_count];
+        memset(cells, 0, total_elem_count);
+#endif
+
+        // TODO: read whole blob and iterate only elems needed
+        size_t idx = 0;
+        size_t x, y = 0;
+        char c;
+        while (in.good()) {
+            in.get(c);
+            if (c == 'x' || c == '.') // ignore newlines or special chars
+            {
+#ifdef USE_STRUCT
+                // for struct need to setup neighbours
+                Cell* cell = CELLS + idx;
+                x = idx % w;
+                y = idx / w;
+
+                int xOffLeft = (x == 0) ? w - 1 : -1;
+                int xOffRight = (x == (w - 1)) ? -(w - 1) : 1;
+                int yOffTop = (y == 0) ? total_elem_count - w : -w;
+                int yOffBot = (y == (h - 1)) ? -((int)total_elem_count - w) : w; // need to cast to int because of negative sign
+
+                cell->topLeft = (cell + yOffTop + xOffLeft);
+                cell->top = (cell + yOffTop);
+                cell->topRight = (cell + yOffTop + xOffRight);
+                cell->left = (cell + xOffLeft);
+                cell->right = (cell + xOffRight);
+                cell->botLeft = (cell + yOffBot + xOffLeft);
+                cell->bot = (cell + yOffBot);
+                cell->botRight = (cell + yOffBot + xOffRight);
+
+                if (c == 'x')  // only need to set alive cells, otherwise stay 0
+                {
+                    setCellState(idx, x, y, (c == 'x') ? 1 : -1);
+                }
+#else
+                //std::cout << "read c: " << c << " for index: " << idx << std::endl;
+                if (c == 'x')  // only need to set alive cells, otherwise stay 0
+                {
+                    x = idx % w;
+                    y = idx / w;
+                    setCellState(idx, x, y);
+                }
+#endif
+
+                if (++idx >= total_elem_count) break;
+            }
+        }
+    }
+    else std::cout << "Error opening " << filePath << std::endl;
+
+    if (!in.eof() && in.fail())
+        std::cout << "error reading " << filePath << std::endl;
+
+    in.close();
+}
+
+void writeToFile(const char* filePath, bool drawNeighbours = false)
+{
+    std::cout << "write file: " << filePath << "..." << std::endl;
+    std::ofstream out(filePath);
+    if (out.is_open())
+    {
+        for (size_t i = 0; i < total_elem_count; ++i)
+        {
+#ifdef USE_STRUCT
+            if (drawNeighbours) out << (((CELLS + i)->value >> 1) + 0);
+            else out << (((CELLS + i)->value & STATE_ALIVE) ? "x" : ".");
+#else
+            if (drawNeighbours) out << ((cells[i] >> 1) + 0);
+            else out << ((cells[i] & STATE_ALIVE) ? "x" : ".");
+#endif
+
+            if (i % w == w - 1) out << std::endl;
+        }
+    }
+    else std::cout << "Error opening " << filePath << std::endl;
+
+    out.close();
+}
+
+int main(int argc, char** argv)
+{
+    // parse command line options
+    // --load NAME(where NAME is a filename with the extension ’.gol’)
+    // --generations NUM
+    // --save NAME(where NAME is a filename with the extension ’.gol’)
+    // --measure (generates measurement output on stdout)
+    // --mode seq (extended in Project 2)
+
+    // TODO: use getopt (unix "only" but simple function)
+    // https://github.com/skandhurkat/Getopt-for-Visual-Studio/blob/master/getopt.h
+    std::cout << "args: " << argc << std::endl;
+    const char* fileI = "random10000_in.gol";
+    std::string filename = "out" + std::to_string(generations) + ".out";
+    const char* fileO = filename.c_str();
+    bool printMeasure = true;
+    for (int i = 0; i < argc; ++i)
+    {
+        //std::cout << "\t" << argv[i] << std::endl;
+        if (i < (argc + 1))
+        {
+            //if (argv[i] == "--load") --> no comparison between const char * and std::string
+            if (strcmp(argv[i], "--load") == 0) fileI = argv[i + 1];
+            else if (strcmp(argv[i], "--save") == 0) fileO = argv[i + 1];
+            else if (strcmp(argv[i], "--generations") == 0) generations = std::stoi(argv[i + 1]);
+            else if (strcmp(argv[i], "--measure") == 0) printMeasure = true;
+            /* TODO: exercise 2
+            else if (argv[i] == "--mode" && i < (argc + 1))*/
+        }
+    }
+
+    // init grid from file
+    Timing::getInstance()->startSetup();
+    // ------------------------------------------------------
+    //readCharFromFile("mini.gol");
+    //writeToFile("mini.neighbors.out", true);
+    //writeToFile("mini.out");
+    // ------------------------------------------------------
+    //readCharFromFile("random250_in.gol");
+    //writeToFile("random250_afterLoad.neighbours.out", true);
+    //writeToFile("random250_afterLoad.out");
+    // ------------------------------------------------------
+    //readCharFromFile("random2000_in.gol");
+    // ------------------------------------------------------
+    readCharFromFile(fileI);
+
+    // make a temp copy of cells to read from without interfering
+#ifdef USE_STRUCT
+    Cell* oldCells = new Cell[total_elem_count];
+#else
+    unsigned char* oldCells = new unsigned char[total_elem_count];
+#endif
+    Timing::getInstance()->stopSetup();
+
+    // ------------------------------------------------------
+    // test
+    /*generations = 100;
+    w = 10;
+    h = 20;
+    total_elem_count = w * h;
+    std::cout << "total: " << total_elem_count << ", w: " << w << ", h: " << h << " gen: " << generations << std::endl;
+
+    cells = new unsigned char[total_elem_count];
+    memset(cells, 0, total_elem_count);
+    */
+    // ------------------------------------------------------
+    /*
+    setCellState(cells, total_elem_count, 0);
+    setCellState(cells, total_elem_count, 41);
+    setCellState(cells, total_elem_count, 42);
+    setCellState(cells, total_elem_count, 43);
+    */
+    // ------------------------------------------------------
+    // 4-8-12 diamond
+    /*
+    size_t idx = 14 + w;
+    for (size_t i = 0; i < 4; ++i)  // 4
+        setCellState(cells, total_elem_count, idx++);
+
+    idx += 2 * w; // newline
+    idx -= 4 + 2;
+    for (size_t i = 0; i < 8; ++i)  // 8
+        setCellState(cells, total_elem_count, idx++);
+
+    idx += 2 * w; // newline
+    idx -= 8 + 2;
+    for (size_t i = 0; i < 12; ++i)  // 12
+        setCellState(cells, total_elem_count, idx++);
+
+    idx += 2 * w; // newline
+    idx -= 12 - 2;
+    for (size_t i = 0; i < 8; ++i)  // 8
+        setCellState(cells, total_elem_count, idx++);
+
+    idx += 2 * w; // newline
+    idx -= 8 - 2;
+    for (size_t i = 0; i < 4; ++i)  // 4
+        setCellState(cells, total_elem_count, idx++);
+    */
+    // ------------------------------------------------------
+
+#ifdef SHOW_GENS
+    printCells();
+#endif
+
+    size_t gen = 0;
+#ifdef USE_STEPS
+    std::string str;
+#endif
+
+    Timing::getInstance()->startComputation();
+    while (gen < generations)
+    {
+        // copy current state in oldstate
+#ifdef USE_STRUCT
+        //memcpy(oldCells, CELLS, total_elem_count * sizeof(Cell)); // for 10 Mio cells this takes about 15 seconds, on x64 almost 30 O_O
+        //std::swap(oldCells, CELLS); // TODO: not possible if using global variable
+#else
+        memcpy(oldCells, cells, total_elem_count);
+        //std::swap(oldCells, cells); // TODO: not possible if using global variable
+#endif
+
+        // calculate next step
+        // version 1: just set a random cell
+        //setCellState(cells, total_elem_count, rand() % total_elem_count);
+
+        // version 2: set next cell each generation
+        //setCellState(cells, total_elem_count, gen);
+
+        // version 3: change cells dependent on oldCells
+        size_t idx = 0;
+        char value = 0;
+        size_t countNeighbours = 0;
+        //for (size_t i = 0; i < total_elem_count; i++) ~ 10 sec
+        for (size_t j = 0; j < h; j++) // ~ 9,760 sec
+        {
+            for (size_t i = 0; i < w; i++)
+            {
+                // TODO: directly use char * instead of array access?
+
+                idx = i + (j * w); // fastest way
+                //idx++; // in every continue
+                //if (i > 0 || j > 0) idx++;
+#ifdef USE_STRUCT
+                value = (oldCells + idx)->value;
+#else
+                value = oldCells[idx];
+#endif
+                //if (value == 0) continue; // this should be the main performance gain as it skips most of the cells after some time 8,253 - 8,538
+                                            // but without this if, execution time is even faster oO 7,258 - 7,494
+                                            // --> which means, as every cell has to be touched no need for memcpying the whole array
+
+                countNeighbours = (value >> 1);
+                //assert(countNeighbours >= 0 && countNeighbours <= 8);
+
+                if (value & STATE_ALIVE) {
+                    // cell is alive -> check if dies (less than 2 or more than 3 neighbours)
+                    if (countNeighbours == 2 || countNeighbours == 3) continue; // Ah, ha, ha, ha, stayin' alive, stayin' alive!
+
+#ifdef USE_STRUCT
+                    setCellState(idx, i, j, -1); // x_x
+#else
+                    setCellState(idx, i, j, false); // x_x
+#endif
+                }
+                else if (countNeighbours == 3) // cell was dead and has enough neighbours -> newborn <3
+                {
+#ifdef USE_STRUCT
+                    setCellState(idx, i, j, +1);
+#else
+
+                    setCellState(idx, i, j);
+#endif
+                }
+            }
+        }
+
+#ifdef SHOW_GENS
+        printCells();
+#endif
+
+#ifdef USE_STEPS
+        std::getline(std::cin, str);
+#endif
+        gen++;
+
+        /*if (gen == 1 || gen == 10 || gen == 100 || gen == 250 || gen == 500 || gen == 1000)
+        {
+            std::string filename = "out" + std::to_string(gen) + "neighbors.out";
+            writeToFile(filename.c_str(), true);
+            filename = "out" + std::to_string(gen) + ".out";
+            writeToFile(filename.c_str());
+        }*/
+    }
+    Timing::getInstance()->stopComputation();
+
+    // write out result
+    Timing::getInstance()->startFinalization();
+    writeToFile(fileO);
+    //writeToFile(fileO, true); // writes count of neighbours instead of just x / .
+    Timing::getInstance()->stopFinalization();
+
+    if (printMeasure)
+    {
+        Timing::getInstance()->print();
+    }
+
+    return EXIT_SUCCESS;
+}
