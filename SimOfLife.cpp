@@ -19,21 +19,23 @@
 
 // TODOs:
 // - optimizations :p
+// - data oriented design -> split bool value and neighbours in favor of tmp buffer to read from
 // - read cmd args with getopt port
 
 // major bottleneck optimizations:
-// - faster memcpy for structs
+// - faster memcpy for structs -> dod
 
 // minor optimizations:
 // - no if()'s to better perform on GPU -> val = TRUE_COND * val + FALSE_CON * val
-// - read whole DataBlob and set cells from there instead of ifstream.get(c);
 // - use classic C file operations?
 // - using charptrs everywhere instead of array indexing
 // - using array as param instead of globals for easy swap between read/work buffer
+// - emulate -O3 for g++ in vc++ (saves about 500 ms)
 
 // done:
 // - input x and y instead of index to minimize calculations -> saves about 1 sec for 10k cells
 // - use structs to init temp variables (offsets, ...) once rather than globals (yikes!) --> need more memory thus memcpy is much slower!
+// - read whole DataBlob and set cells from there instead of ifstream.get(c);
 
 #include <stdlib.h> // EXIT_SUCCESS
 #include <iostream> // memset
