@@ -102,7 +102,7 @@ void printCells()
     }
 }
 
-void setCellState(unsigned char* ptr_cell, unsigned int x, unsigned int y, bool alive = true)
+inline void setCellState(unsigned char* ptr_cell, unsigned int x, unsigned int y, bool alive = true)
 {
     // set cell value
     //if (alive)  *(ptr_cell) |= STATE_ALIVE;
@@ -133,7 +133,7 @@ void setCellState(unsigned char* ptr_cell, unsigned int x, unsigned int y, bool 
 
 #ifdef USE_STRUCT
 // minor modifications for struct: using +1 to add, -1 to sub, 0 just clears the value
-void setCellState(Cell* ptr_cell, int alive)
+inline void setCellState(Cell* ptr_cell, int alive)
 {
     // set cell value
     //if (alive > 0)        ptr_cell->value |= STATE_ALIVE;
@@ -188,17 +188,16 @@ void readCharFromFile(const char* filePath)
 
         // TODO: read whole blob and iterate only elems needed
         unsigned int idx = 0;
-        unsigned int x, y = 0;
         char c;
-        while (in.good()) {
-            in.get(c);
-            if (c == 'x' || c == '.') // ignore newlines or special chars
+        for (unsigned int y = 0; y < h; y++)
+        {
+            getline(in, line);
+            for (unsigned int x = 0; x < w; x++)
             {
+                c = line[x];
 #ifdef USE_STRUCT
                 // for struct need to setup neighbours
                 Cell* cell = CELLS + idx;
-                x = idx % w;
-                y = idx / w;
 
                 int xOffLeft = (x == 0) ? w - 1 : -1;
                 int xOffRight = (x == (w - 1)) ? -(w - 1) : 1;
@@ -222,8 +221,6 @@ void readCharFromFile(const char* filePath)
                 //std::cout << "read c: " << c << " for index: " << idx << std::endl;
                 if (c == 'x')  // only need to set alive cells, otherwise stay 0
                 {
-                    x = idx % w;
-                    y = idx / w;
                     setCellState(cells + idx, x, y, 1);
                 }
 #endif
