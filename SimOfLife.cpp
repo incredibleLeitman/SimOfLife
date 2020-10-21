@@ -39,7 +39,11 @@
 #include <iostream> // memset
 #include <fstream> // ifstream
 #include <string> // getline
-#include <cassert>  // assert
+#include <cassert> // assert
+
+#ifdef __GNUC__
+#include <cstring> // memcpy for g++
+#endif
 
 //#define DEBUG_OUT
 //#define USE_STEPS
@@ -54,10 +58,10 @@
 
 #define STATE_ALIVE 0x01
 
-int w;
-int h;
-size_t total_elem_count;
-size_t generations = 250;
+unsigned int w;
+unsigned int h;
+unsigned int total_elem_count;
+unsigned int generations = 250;
 unsigned char* cells;
 
 #ifdef USE_STRUCT
@@ -83,7 +87,7 @@ void printCells()
     system("CLS"); // TODO: remove windows specific
 #endif
 
-    for (size_t i = 0; i < total_elem_count; ++i)
+    for (unsigned int i = 0; i < total_elem_count; ++i)
     {
         if (i % w == 0) std::cout << std::endl;
 
@@ -98,7 +102,7 @@ void printCells()
     }
 }
 
-void setCellState(unsigned char* ptr_cell, size_t x, size_t y, bool alive = true)
+void setCellState(unsigned char* ptr_cell, unsigned int x, unsigned int y, bool alive = true)
 {
     // set cell value
     //if (alive)  *(ptr_cell) |= STATE_ALIVE;
@@ -111,9 +115,9 @@ void setCellState(unsigned char* ptr_cell, size_t x, size_t y, bool alive = true
     // calculate neighbours -> wrap-around at borders: { 0, 0 } is a neighbor of { m, n } on a m x n sized grid
     // offsets in x,y direction
     int xOffLeft = (x == 0) ? w - 1 : -1;
-    int xOffRight = (x == (w - 1)) ? -(w - 1) : 1;
-    int yOffTop = (y == 0) ? total_elem_count - w : -w;
-    int yOffBot = (y == (h - 1)) ? -((int)total_elem_count - w) : w; // need to cast to int because of negative sign
+    int xOffRight = (x == (w - 1)) ? -((int)w - 1) : 1;
+    int yOffTop = (y == 0) ? total_elem_count - w : -(int)w;
+    int yOffBot = (y == (h - 1)) ? -(int)(total_elem_count - w) : w; // need to cast to int because of negative sign
 
     // add bits for neighbour counts
     int val = (alive) * 0x02 + (!alive) * -0x02; // 9,136
@@ -159,7 +163,7 @@ void readCharFromFile(const char* filePath)
         std::getline(in, line);
         std::cout << "read line " << line << std::endl;
         // TODO: better split
-        size_t pos = line.find(',');
+        unsigned int pos = line.find(',');
         if (pos != std::string::npos)
         {
             w = std::stoi(line.substr(0, pos));
@@ -183,8 +187,8 @@ void readCharFromFile(const char* filePath)
 #endif
 
         // TODO: read whole blob and iterate only elems needed
-        size_t idx = 0;
-        size_t x, y = 0;
+        unsigned int idx = 0;
+        unsigned int x, y = 0;
         char c;
         while (in.good()) {
             in.get(c);
@@ -242,7 +246,7 @@ void writeToFile(const char* filePath, bool drawNeighbours = false)
     std::ofstream out(filePath);
     if (out.is_open())
     {
-        for (size_t i = 0; i < total_elem_count; ++i)
+        for (unsigned int i = 0; i < total_elem_count; ++i)
         {
 #ifdef USE_STRUCT
             if (drawNeighbours) out << (((CELLS + i)->value >> 1) + 0);
@@ -336,28 +340,28 @@ int main(int argc, char** argv)
     // ------------------------------------------------------
     // 4-8-12 diamond
     /*
-    size_t idx = 14 + w;
-    for (size_t i = 0; i < 4; ++i)  // 4
+    unsigned int idx = 14 + w;
+    for (unsigned int i = 0; i < 4; ++i)  // 4
         setCellState(cells, total_elem_count, idx++);
 
     idx += 2 * w; // newline
     idx -= 4 + 2;
-    for (size_t i = 0; i < 8; ++i)  // 8
+    for (unsigned int i = 0; i < 8; ++i)  // 8
         setCellState(cells, total_elem_count, idx++);
 
     idx += 2 * w; // newline
     idx -= 8 + 2;
-    for (size_t i = 0; i < 12; ++i)  // 12
+    for (unsigned int i = 0; i < 12; ++i)  // 12
         setCellState(cells, total_elem_count, idx++);
 
     idx += 2 * w; // newline
     idx -= 12 - 2;
-    for (size_t i = 0; i < 8; ++i)  // 8
+    for (unsigned int i = 0; i < 8; ++i)  // 8
         setCellState(cells, total_elem_count, idx++);
 
     idx += 2 * w; // newline
     idx -= 8 - 2;
-    for (size_t i = 0; i < 4; ++i)  // 4
+    for (unsigned int i = 0; i < 4; ++i)  // 4
         setCellState(cells, total_elem_count, idx++);
     */
     // ------------------------------------------------------
@@ -366,7 +370,7 @@ int main(int argc, char** argv)
     printCells();
 #endif
 
-    size_t gen = 0;
+    unsigned int gen = 0;
 #ifdef USE_STEPS
     std::string str;
 #endif
@@ -391,13 +395,13 @@ int main(int argc, char** argv)
         //setCellState(cells, total_elem_count, gen);
 
         // version 3: change cells dependent on oldCells
-        size_t idx = 0;
+        unsigned int idx = 0;
         char value = 0;
-        size_t countNeighbours = 0;
-        //for (size_t i = 0; i < total_elem_count; i++) ~ 10 sec
-        for (size_t j = 0; j < h; j++) // ~ 9,760 sec
+        unsigned int countNeighbours = 0;
+        //for (unsigned int i = 0; i < total_elem_count; i++) ~ 10 sec
+        for (unsigned int j = 0; j < h; j++) // ~ 9,760 sec
         {
-            for (size_t i = 0; i < w; i++)
+            for (unsigned int i = 0; i < w; i++)
             {
                 // TODO: directly use char * instead of array access?
 
