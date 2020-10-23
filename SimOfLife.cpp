@@ -54,6 +54,7 @@
 //#define NO_IFS // ~6800ms, with normal ifs about 200 - 300 ms faster
 
 #include "Timing.h"
+#include "omp.h" // need to have project settings C/C++ openMP enabled
 
 // each cell is represented as a byte:
 //      LSB is state 0 = dead, 1... alive
@@ -195,7 +196,6 @@ void readFromFile(const char* filePath)
         memset(cells, 0, total_elem_count);
 #endif
 
-        // TODO: read whole blob and iterate only elems needed
         unsigned int idx = 0;
         char c;
         for (unsigned int y = 0; y < h; y++)
@@ -381,6 +381,14 @@ int main(int argc, char** argv)
 #ifdef USE_STEPS
     std::string str;
 #endif
+
+    int nthreads, tid;
+#pragma omp parallel private(nthreads, tid) // arguments are shared variables
+    {
+        // ... tid =
+        nthreads = omp_get_num_threads();
+        std::cout << "Number of threads: " << nthreads << std::endl;
+    } // threads join master thread and disband
 
     Timing::getInstance()->startComputation();
     while (gen < generations)
