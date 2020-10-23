@@ -1,14 +1,8 @@
 CXX = g++
-CXXFLAGS = -Wall -O3
+CXXFLAGS = -Wall -O3 -fopenmp
 
-SimOfLife: SimOfLife.o Timing.o
-	$(CXX) $(CXXFLAGS) -o SimOfLife SimOfLife.o Timing.o
+SimOfLife: SimOfLife.cpp Timing.cpp
 
-main.o: SimOfLife.cpp.cpp Timing.h
-	$(CXX) $(CXXFLAGS) -c SimOfLife.cpp
-
-Timing.o: Timing.h
-
-clean :
-	del *.o SimOfLife.exe
-    #-rm -f *.o SimOfLife
+clean:
+	del SimOfLife.exe SimOfLife
+	#-rm -f *.o SimOfLife
