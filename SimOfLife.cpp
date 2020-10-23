@@ -48,9 +48,10 @@
 #endif
 
 //#define DEBUG_OUT
-//#define USE_STEPS
-//#define SHOW_GENS
-//#define USE_STRUCT
+//#define USE_STEPS // wait for user input to perform next step
+//#define SHOW_GENS // prints every generation
+//#define USE_STRUCT // using a struct which contains ptr to all neighbours so don't have to be calculated every setCell step
+//#define NO_IFS // ~6800ms, with normal ifs about 200 - 300 ms faster
 
 #include "Timing.h"
 
@@ -63,6 +64,8 @@
 unsigned int w;
 unsigned int h;
 unsigned int total_elem_count;
+int right_border;
+int bot_border;
 unsigned int generations = 250;
 unsigned char* cells;
 
@@ -107,22 +110,24 @@ void printCells()
 inline void setCellState(unsigned char* ptr_cell, unsigned int x, unsigned int y, bool alive = true)
 {
     // set cell value
-    //if (alive)  *(ptr_cell) |= STATE_ALIVE;
-    //else        *(ptr_cell) &= ~STATE_ALIVE;
     *(ptr_cell) ^= STATE_ALIVE; // just toggle -> no if, saves about 500 ms
-
-    // attempt to spare som ifs... not efficient
-    //int status = ((alive == 1 || alive == -1) * STATE_ALIVE) + (alive == 0) * *(ptr_cell);
 
     // calculate neighbours -> wrap-around at borders: { 0, 0 } is a neighbor of { m, n } on a m x n sized grid
     // offsets in x,y direction
-    int xOffLeft = (x == 0) ? w - 1 : -1;
-    int xOffRight = (x == (w - 1)) ? -((int)w - 1) : 1;
-    int yOffTop = (y == 0) ? total_elem_count - w : -(int)w;
-    int yOffBot = (y == (h - 1)) ? -(int)(total_elem_count - w) : w; // need to cast to int because of negative sign
+#ifdef NO_IFS
+    int xOffLeft = right_border*(x == 0) + -1*(x != 0);
+    int xOffRight = (-right_border*(x == right_border)) + 1*(x != right_border);
+    int yOffTop = bot_border*(y == 0) + (-(int)w*(y != 0));
+    int yOffBot = (y == (h - 1)) ? -bot_border : w; // need to cast to int because of negative sign
+#else
+    int xOffLeft = (x == 0) ? right_border : -1;
+    int xOffRight = (x == right_border) ? -right_border : 1;
+    int yOffTop = (y == 0) ? bot_border : -(int)w;
+    int yOffBot = (y == (h - 1)) ? -bot_border : w; // need to cast to int because of negative sign
+#endif
 
     // add bits for neighbour counts
-    int val = (alive) * 0x02 + (!alive) * -0x02; // 9,136
+    int val = (alive) * 0x02 + (!alive) * -0x02;
     *(ptr_cell + yOffTop + xOffLeft) += val;
     *(ptr_cell + yOffTop) += val;
     *(ptr_cell + yOffTop + xOffRight) += val;
@@ -155,7 +160,7 @@ inline void setCellState(Cell* ptr_cell, int alive)
 }
 #endif
 
-void readCharFromFile(const char* filePath)
+void readFromFile(const char* filePath)
 {
     std::cout << "read file: " << filePath << "..." << std::endl;
     std::ifstream in(filePath);
@@ -178,6 +183,8 @@ void readCharFromFile(const char* filePath)
         }
 
         total_elem_count = w * h;
+        right_border = w - 1;
+        bot_border = total_elem_count - w;
         std::cout << "total: " << total_elem_count << ", w: " << w << ", h: " << h << " gen: " << generations << std::endl;
 
 #ifdef USE_STRUCT
@@ -245,6 +252,7 @@ void writeToFile(const char* filePath, bool drawNeighbours = false)
     std::ofstream out(filePath);
     if (out.is_open())
     {
+        out << w << ", " << h << std::endl;
         for (unsigned int i = 0; i < total_elem_count; ++i)
         {
 #ifdef USE_STRUCT
@@ -297,17 +305,17 @@ int main(int argc, char** argv)
     // init grid from file
     Timing::getInstance()->startSetup();
     // ------------------------------------------------------
-    //readCharFromFile("mini.gol");
+    //readFromFile("mini.gol");
     //writeToFile("mini.neighbors.out", true);
     //writeToFile("mini.out");
     // ------------------------------------------------------
-    //readCharFromFile("random250_in.gol");
+    //readFromFile("random250_in.gol");
     //writeToFile("random250_afterLoad.neighbours.out", true);
     //writeToFile("random250_afterLoad.out");
     // ------------------------------------------------------
-    //readCharFromFile("random2000_in.gol");
+    //readFromFile("random2000_in.gol");
     // ------------------------------------------------------
-    readCharFromFile(fileI);
+    readFromFile(fileI);
 
     // make a temp copy of cells to read from without interfering
 #ifdef USE_STRUCT
