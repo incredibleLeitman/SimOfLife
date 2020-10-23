@@ -10,4 +10,5 @@ main.o: SimOfLife.cpp.cpp Timing.h
 Timing.o: Timing.h
 
 clean :
-	-rm *.o SimOfLife
+	del *.o SimOfLife.exe
+    #-rm -f *.o SimOfLife
