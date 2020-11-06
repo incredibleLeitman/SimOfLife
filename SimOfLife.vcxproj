@@ -135,6 +135,9 @@
     <ClCompile Include="Timing.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="oclMode.h" />
+    <ClInclude Include="ompMode.h" />
+    <ClInclude Include="seqMode.h" />
     <ClInclude Include="Timing.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
