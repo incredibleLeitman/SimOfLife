@@ -1,17 +1,16 @@
 #pragma once
 
-// each cell is represented as a byte:
-//      LSB is state 0 = dead, 1... alive
-//      other bits are number of neighbours
-#define STATE_ALIVE 0x01
+/* ---------------------------------------------------------------------------
+sequential mode:
+run on only one thread sequential; to minimize footprint, actual cell value
+and count of alive neighbours are stored in char.
 
-unsigned int w;
-unsigned int h;
-unsigned int total_elem_count;
-int right_border;
-int bot_border;
-unsigned char* cells;
-unsigned char* oldCells;
+initial idea was, that in each step only cells with alive state have an impact
+on the generation, but calculaton and store was very imperformant.
+
+--------------------------------------------------------------------------- */
+
+#include "common.h"
 
 void printCells()
 {
@@ -42,18 +41,18 @@ inline void setCellState(unsigned char* ptr_cell, unsigned int x, unsigned int y
     // calculate neighbours -> wrap-around at borders: { 0, 0 } is a neighbor of { m, n } on a m x n sized grid
     // offsets in x,y direction
 #ifdef NO_IFS
-    int xOffLeft = right_border * (x == 0) + -1 * (x != 0);
-    int xOffRight = (-right_border * (x == right_border)) + 1 * (x != right_border);
-    int yOffTop = bot_border * (y == 0) + (-(int)w * (y != 0));
-    int yOffBot = (y == (h - 1)) ? -bot_border : w; // need to cast to int because of negative sign
+    int xOffLeft = col_right * (x == 0) + -1 * (x != 0);
+    int xOffRight = (-col_right * (x == col_right)) + 1 * (x != col_right);
+    int yOffTop = col_bot * (y == 0) + (-(int)w * (y != 0));
+    int yOffBot = (y == (h - 1)) ? -col_bot : w; // need to cast to int because of negative sign
 #else
-    int xOffLeft = (x == 0) ? right_border : -1;
-    int xOffRight = (x == right_border) ? -right_border : 1;
-    int yOffTop = (y == 0) ? bot_border : -(int)w;
-    int yOffBot = (y == (h - 1)) ? -bot_border : w; // need to cast to int because of negative sign
+    int xOffLeft = (x == 0) ? col_right : -1;
+    int xOffRight = (x == col_right) ? -col_right : 1;
+    int yOffTop = (y == 0) ? col_bot : -(int)w;
+    int yOffBot = (y == (h - 1)) ? -col_bot : w; // need to cast to int because of negative sign
 #endif
 
-    // add bits for neighbour counts
+    // add bits for neighbour counts -> performs a diff!
     int val = (alive) * 0x02 + (!alive) * -0x02;
     *(ptr_cell + yOffTop + xOffLeft) += val;
     *(ptr_cell + yOffTop) += val;
@@ -72,7 +71,7 @@ void readFromFile(const char* filePath)
     if (in.is_open())
     {
         std::string line;
-        std::getline(in, line); // get first line for explizit w / h
+        std::getline(in, line); // get first line for explizit w / h definition
 
         // TODO: better split
         size_t pos = line.find(',');
@@ -88,8 +87,8 @@ void readFromFile(const char* filePath)
         }
 
         total_elem_count = w * h;
-        right_border = w - 1;
-        bot_border = total_elem_count - w;
+        col_right = w - 1;
+        col_bot = total_elem_count - w;
         std::cout << "total: " << total_elem_count << ", w: " << w << ", h: " << h << std::endl;
 
         cells = new unsigned char[total_elem_count];
@@ -143,46 +142,58 @@ void writeToFile(const char* filePath, bool drawNeighbours = false)
 
 void runSeq(const char* fileI, const char* fileO, unsigned int generations)
 {
+#ifdef _DEBUG
+    std::cout << "DEBUG" << std::endl;
+#endif
+    std::cout << "running mode: seq" << std::endl;
+
     // init grid from file
     Timing::getInstance()->startSetup();
     readFromFile(fileI);
+
     // make a copy of cells to read from without interfering with current board
     oldCells = new unsigned char[total_elem_count];
-    Timing::getInstance()->stopSetup();
 
 #ifdef SHOW_GENS
     printCells();
 #endif
 
-    Timing::getInstance()->startComputation();
     unsigned int gen = 0;
 #ifdef USE_STEPS
     std::string str;
 #endif
 
+    unsigned int row = 0;
+    unsigned int col = 0;
     unsigned int idx = 0;
     char value = 0;
     unsigned int countNeighbours = 0;
-    while (gen < generations)
+    Timing::getInstance()->stopSetup();
+
+    // actual sim loop
+    Timing::getInstance()->startComputation();
+    for (gen = 0; gen < generations; gen++)
     {
         // copy current state in oldstate
         memcpy(oldCells, cells, total_elem_count);
+
         //std::swap(oldCells, cells); // swap ptrs instead of memcpy could improve performance bc just switch working array but is (yet) not usable because setting neighbours as diff
+        //*oldCells = *cells;
+        //memset(oldCells, 0, total_elem_count);
 
         // change cells dependent on oldCells
-        for (unsigned int row = 0; row < h; row++)
+        for (row = 0; row < h; row++)
         {
-            for (unsigned int col = 0; col < w; col++)
+            for (col = 0; col < w; col++)
             {
-                // TODO: directly use char * instead of array access?
-
-                idx = col + (row * w); // fastest way
                 //idx++; // in every continue
                 //if (i > 0 || j > 0) idx++;
-                value = oldCells[idx];
-                //if (value == 0) continue; // this should be the main performance gain as it skips most of the cells after some time 8,253 - 8,538
-                                            // but without this if, execution time is even faster oO 7,258 - 7,494
-                                            // --> which means, as every cell has to be touched no need for memcpying the whole array
+                idx = col + (row * w); // fastest way
+
+                value = *(oldCells + idx);
+                //if (value == 0) continue; // this should be the main performance gain as it skips most of the cells after some time
+                                            // but without this if, execution time is even faster oO
+                                            // --> which means, as every cell has to be touched no need for memcpying the whole array but handling only diffs
 
                 countNeighbours = (value >> 1);
 
@@ -192,11 +203,14 @@ void runSeq(const char* fileI, const char* fileO, unsigned int generations)
                 bool die = (value & STATE_ALIVE) && !(countNeighbours == 2 || countNeighbours == 3); // x_x
                 setCellState(cells + idx, i, j, (born * 1 + die * -1) != 0);*/
 
-                if (value & STATE_ALIVE) {
-                    // cell is alive -> check if dies (less than 2 or more than 3 neighbours)
-                    if (countNeighbours == 2 || countNeighbours == 3) continue; // Ah, ha, ha, ha, stayin' alive, stayin' alive!
-
-                    setCellState(cells + idx, col, row, false); // x_x
+                if (value & STATE_ALIVE)
+                {
+                    // cell is alive -> check diese if less than 2 or more than 3 neighbours
+                    if (countNeighbours < 2 || countNeighbours > 3)
+                    {
+                        setCellState(cells + idx, col, row, false); // x_x
+                    }
+                    // else // Ah, ha, ha, ha, stayin' alive, stayin' alive!
                 }
                 else if (countNeighbours == 3) // cell was dead and has enough neighbours -> newborn <3
                 {
@@ -212,7 +226,6 @@ void runSeq(const char* fileI, const char* fileO, unsigned int generations)
 #ifdef USE_STEPS
         std::getline(std::cin, str);
 #endif
-        gen++;
 
         /*if (gen == 1 || gen == 10 || gen == 100 || gen == 250 || gen == 500 || gen == 1000)
         {
