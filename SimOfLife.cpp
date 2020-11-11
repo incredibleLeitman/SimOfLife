@@ -1,4 +1,3 @@
-
 // TODOs:
 // - optimizations :p
 // - data oriented design -> split bool value and neighbours in favor of tmp buffer to read from
@@ -7,6 +6,8 @@
 
 // major bottleneck optimizations:
 // - faster memcpy for structs -> dod
+// - only look at alive cells -> only those can die or create new cells
+// - at least check if a map neighbours for cell which contains 8 pointers to cells would be faster than recalc everytime
 
 // minor optimizations:
 // - no if()'s to better perform on GPU -> val = TRUE_COND * val + FALSE_CON * val
@@ -51,7 +52,7 @@ int main(int argc, char** argv)
     const char* fileO = path.c_str();           // --save - filename with the extension ’.gol’
     bool printMeasure = true;                   // --mesaure - generates measurement output on stdout
     std::string mode = "seq";                   // --mode - extended in Project 2: seq, omp, ocl
-    unsigned int threads = 1;                   // --threads - amount of threads to use for omp
+    int threads = 8;                            // --threads - amount of threads to use for omp
     int platformId = 0;                         // --platformId - ocl
     int deviceId = 0;                           // --deviceId - ocl
     for (int i = 0; i < argc; ++i)
