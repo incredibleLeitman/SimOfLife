@@ -163,8 +163,8 @@ void runSeq(const char* fileI, const char* fileO, unsigned int generations)
     std::string str;
 #endif
 
-    unsigned int row = 0;
-    unsigned int col = 0;
+    int row = 0;
+    int col = 0;
     unsigned int idx = 0;
     char value = 0;
     unsigned int countNeighbours = 0;
@@ -182,6 +182,7 @@ void runSeq(const char* fileI, const char* fileO, unsigned int generations)
         //memset(oldCells, 0, total_elem_count);
 
         // change cells dependent on oldCells
+//#pragma omp parallel for private(row, col) //shared(cells, oldCells) // with this able to reduce runtime down to 4 sec for set_threads(8)
         for (row = 0; row < h; row++)
         {
             for (col = 0; col < w; col++)

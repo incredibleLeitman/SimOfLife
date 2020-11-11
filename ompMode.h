@@ -4,8 +4,28 @@
 omp mode:
 uses OpenMP to utilize parallelism.
 
-needed another datastructure as seqMode, because was not parallelizable due to 
+needed another datastructure as seqMode, because was not parallelizable due to
 internal constraints because of diff update instead of full state.
+
+
+some timing measures bevor using omp or special handling for y == 0 or row_bot
+only handling left/right x:
+  Windows: 9112ms, 9123ms, 9180ms, 9253.18ms
+  Linux:  10513.3ms, 10319.2ms, 10323.1ms
+
+also handling top/bot y:
+  Windows: 9308.48ms, 9353.79ms, 9310.43ms
+  Linux:   10223.9ms, 10055.8ms, 10039.1ms
+
+
+OpenMP processing depends very much on num of threads and parallelized ares:
+  Linux:
+    thread 2:   7995.63ms, 7523.87ms
+    thread 4:   6472.69ms, 
+    thread 8:   6622.63ms, 6530.42ms
+    thread 16:  7377.43ms, 7920.6ms
+  Windows:
+    thread 8:   4803.61ms, 5382.75ms, 4057.27ms, 5070.67ms
 
 --------------------------------------------------------------------------- */
 
@@ -127,8 +147,7 @@ void runOMP(const char* fileI, const char* fileO, unsigned int generations, int 
     std::cout << "OpenMP version: " << _OPENMP << std::endl;
     int num_threads = omp_get_num_threads();
     if (threads != num_threads) omp_set_num_threads(threads);
-    std::cout << "number of processors: " << omp_get_num_procs() << std::endl;
-    std::cout << "number of threads: " << omp_get_num_threads() << " for param: " << threads << std::endl;
+    std::cout << "number of processors: " << omp_get_num_procs() << ", set number of threads: " << threads << std::endl;
 
     int row = 0;
     int col = 0;
@@ -142,49 +161,19 @@ void runOMP(const char* fileI, const char* fileO, unsigned int generations, int 
     int xOffLeft = -1;
     int xOffRight = +1;
     Timing::getInstance()->stopSetup();
-
-    /*
-    #pragma omp parallel for
-
-    #pragma omp parallel private(tid) // arguments are shared variables
-    {
-        int tid = omp_get_thread_num();
-//#pragma omp single
-#pragma omp master // = if (tid == 0), master thread
-        {
-            int num_threads = omp_get_num_threads();
-            std::cout << "Number of threads: " << num_threads << std::endl;
-            omp_set_num_threads(threads);
-        }
-        int tid = omp_get_thread_num();
-        std::cout << "starting thread " << tid << std::endl;
-    } // threads join master thread and disband
-    */
-
+    
     Timing::getInstance()->startComputation();
     for (gen = 0; gen < generations; gen++)
     {
-        yOffTop = -(int)w;
-        yOffBot = +(int)w;
-        xOffLeft = -1;
-        xOffRight = +1;
-
         // need to get current neighbour count, because other than seqMode updates are not diffs but full states
         // first handle all cells without border mapping, afterwards special handling
-        // some timing measures bevor using omp or special handling for y == 0 or row_bot
-        // only handling left/right x
-        // Windows: 9112ms, 9123ms, 9180ms, 9253.18ms
-        // Linux:  10513.3ms, 10319.2ms, 10323.1ms
-        // also handling top/bot y
-        // Windows: 9308.48ms, 9353.79ms, 9310.43ms
-        // Linux:   10223.9ms, 10055.8ms, 10039.1ms
-#pragma omp parallel for shared(neighbours) private(row, col)
+#pragma omp parallel for shared(neighbours) private(row, col) // TEST: use this and no inner loop: Win: 4631.35ms, Ubuntu 7405.71ms
         for (row = 0; row < h; row++)
         {
             yOffTop = (row == 0) ? col_bot : -(int)w;
             yOffBot = (row == (h - 1)) ? -col_bot : w;
 
-//#pragma omp parallel for shared(neighbours) private(row, col)
+//#pragma omp parallel for shared(neighbours) private(row, col) // TEST: use here and not for loop -> Win: segfault, Ubuntu: 6450ms
             for (col = 1; col < col_right; col++)
             {
                 idx = col + (row * w); // fastest way
@@ -201,7 +190,7 @@ void runOMP(const char* fileI, const char* fileO, unsigned int generations, int 
         }
 
         // change cells dependent on oldCells
-#pragma omp parallel for shared(cells)
+#pragma omp parallel for shared(cells) private(idx)
         for (idx = 0; idx < total_elem_count; ++idx)
         {
             value = *(cells + idx);
