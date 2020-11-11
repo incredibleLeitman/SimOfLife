@@ -169,15 +169,15 @@ void runOMP(const char* fileI, const char* fileO, unsigned int generations, int 
         xOffLeft = -1;
         xOffRight = +1;
 
-        // TESTS
-        // default                              33 sek
-        // after enabling no optimizations      43 sek
-
         // need to get current neighbour count, because other than seqMode updates are not diffs but full states
         // first handle all cells without border mapping, afterwards special handling
-
+        // some timing measures bevor using omp or special handling for y == 0 or row_bot
+        // only handling left/right x
         // Windows: 9112ms, 9123ms, 9180ms, 9253.18ms
         // Linux:  10513.3ms, 10319.2ms, 10323.1ms
+        // also handling top/bot y
+        // Windows: 9308.48ms, 9353.79ms, 9310.43ms
+        // Linux:   10223.9ms, 10055.8ms, 10039.1ms
 #pragma omp parallel for shared(neighbours) private(row, col)
         for (row = 0; row < h; row++)
         {
@@ -199,61 +199,6 @@ void runOMP(const char* fileI, const char* fileO, unsigned int generations, int 
             idx = col_right + (row * w);
             *(neighbours + idx) = sumNeighbours(cells + idx, yOffTop, yOffBot, xOffLeft, -col_right);
         }
-
-        // Windows: 9308.48ms, 9353.79ms, 9310.43ms
-        // Linux:   10223.9ms, 10055.8ms, 10039.1ms
-        /*for (row = 1; row < row_bot; row++)
-        {
-            for (col = 1; col < col_right; col++)
-            {
-                idx = col + (row * w);
-                *(neighbours + idx) = sumNeighbours(cells + idx, yOffTop, yOffBot, xOffLeft, xOffRight);
-            }
-
-            // handle border for x == 0
-            idx = (row * w);
-            *(neighbours + idx) = sumNeighbours(cells + idx, yOffTop, yOffBot, col_right, xOffRight);
-
-            // handle border for x == col_right
-            idx = col_right + (row * w);
-            *(neighbours + idx) = sumNeighbours(cells + idx, yOffTop, yOffBot, xOffLeft, -col_right);
-        }
-
-        // handle row == 0
-        row = 0;
-        yOffTop = col_bot;
-        for (col = 1; col < col_right; col++)
-        {
-            idx = col + (row * w);
-            *(neighbours + idx) = sumNeighbours(cells + idx, yOffTop, yOffBot, xOffLeft, xOffRight);
-        }
-
-        // handle border for x == 0
-        idx = (row * w);
-        *(neighbours + idx) = sumNeighbours(cells + idx, yOffTop, yOffBot, col_right, xOffRight);
-
-        // handle border for x == col_right
-        idx = col_right + (row * w);
-        *(neighbours + idx) = sumNeighbours(cells + idx, yOffTop, yOffBot, xOffLeft, -col_right);
-
-        // handle row == row_bot
-        row = row_bot;
-        yOffTop = -(int)w;
-        yOffBot = -col_bot;
-        for (col = 1; col < col_right; col++)
-        {
-            idx = col + (row * w);
-            *(neighbours + idx) = sumNeighbours(cells + idx, yOffTop, yOffBot, xOffLeft, xOffRight);
-        }
-
-        // handle border for x == 0
-        idx = (row * w);
-        *(neighbours + idx) = sumNeighbours(cells + idx, yOffTop, yOffBot, col_right, xOffRight);
-
-        // handle border for x == col_right
-        idx = col_right + (row * w);
-        *(neighbours + idx) = sumNeighbours(cells + idx, yOffTop, yOffBot, xOffLeft, -col_right);
-        */
 
         // change cells dependent on oldCells
 #pragma omp parallel for shared(cells)
