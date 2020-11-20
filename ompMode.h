@@ -195,6 +195,9 @@ void runOMP(const char* fileI, const char* fileO, unsigned int generations, int 
         {
             value = *(cells + idx);
             countNeighbours = *(neighbours + idx);
+
+            /*
+            // set new state depending on current state, only if changed
             if (value == STATE_ALIVE)
             {
                 // cell is alive -> check diese if less than 2 or more than 3 neighbours
@@ -208,6 +211,10 @@ void runOMP(const char* fileI, const char* fileO, unsigned int generations, int 
             {
                 *(cells + idx) = STATE_ALIVE;
             }
+            */
+
+            // alternative option: always set value
+            *(cells + idx) = (countNeighbours == 3) + value * (countNeighbours == 2);
         }
     }
 

@@ -98,7 +98,7 @@ void readFromFile(const char* filePath)
         char c;
         for (unsigned int y = 0; y < h; y++)
         {
-            getline(in, line);
+            std::getline(in, line);
             for (unsigned int x = 0; x < w; x++)
             {
                 c = line[x];
@@ -204,6 +204,7 @@ void runSeq(const char* fileI, const char* fileO, unsigned int generations)
                 bool die = (value & STATE_ALIVE) && !(countNeighbours == 2 || countNeighbours == 3); // x_x
                 setCellState(cells + idx, i, j, (born * 1 + die * -1) != 0);*/
 
+                // set new state depending on current state, only if changed
                 if (value & STATE_ALIVE)
                 {
                     // cell is alive -> check diese if less than 2 or more than 3 neighbours
@@ -217,6 +218,9 @@ void runSeq(const char* fileI, const char* fileO, unsigned int generations)
                 {
                     setCellState(cells + idx, col, row, true);
                 }
+
+                // alternative option: always set value (not applicable in this version because handling depending diffs)
+                //setCellState(cells + idx, col, row, (countNeighbours == 3) + (value & STATE_ALIVE) * (countNeighbours == 2));
             }
         }
 
