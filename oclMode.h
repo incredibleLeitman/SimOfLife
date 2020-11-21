@@ -11,7 +11,7 @@
 // - cl.hpp, the C++ bindings for OpenCL v 1.2
 #include <CL/cl.hpp>
 
-void initOCL()
+void initOCL(unsigned int plaformId, unsigned int deviceId)
 {
 	const std::string KERNEL_FILE = "kernel.cl";
 	cl_int err = CL_SUCCESS;
@@ -23,15 +23,38 @@ void initOCL()
 		// get available platforms ( NVIDIA, Intel, AMD,...)
 		std::vector<cl::Platform> platforms;
 		cl::Platform::get(&platforms);
-		if (platforms.size() == 0) throw "No OpenCL platforms available!\n";
+		if (platforms.size() == 0 || platforms.size() < plaformId) throw "specified OpenCL platform not available!\n";
+
+		bool test = true;
+		// test output to gather information about installed hardware:
+		// SyntaX-Desktop:
+		//	platform: NVIDIA CUDA
+		//		device: GeForce GTX 1080
+		//	platform: Intel(R) OpenCL HD Graphics
+		//		device : Intel(R) HD Graphics 530
+		if (test)
+		{
+			for (auto& platform : platforms)
+			{
+				std::cout << "platform: " << platform.getInfo<CL_PLATFORM_NAME>() << "\n";
+				cl_context_properties properties[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)(platform)(), 0 };
+				cl::Context context(CL_DEVICE_TYPE_ALL, properties);
+				devices = context.getInfo<CL_CONTEXT_DEVICES>();
+				for (auto& device : devices)
+				{
+					std::cout << "device: " << device.getInfo<CL_DEVICE_NAME>() << "\n";
+				}
+			}
+		}
 
 		// create a context and get available devices
-		cl::Platform platform = platforms[0]; // on a different machine, you may have to select a different platform!
-		cl_context_properties properties[] =
-		{ CL_CONTEXT_PLATFORM, (cl_context_properties)(platforms[0])(), 0 };
+
+		cl::Platform platform = platforms[plaformId];
+		cl_context_properties properties[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)(platform)(), 0 };
 		cl::Context context(CL_DEVICE_TYPE_GPU, properties);
 
 		devices = context.getInfo<CL_CONTEXT_DEVICES>();
+		if (devices.size() == 0 || devices.size() < deviceId) throw "specified OpenCL device not available!\n";
 
 		// load and build the kernel
 		std::ifstream sourceFile(KERNEL_FILE);
@@ -50,7 +73,7 @@ void initOCL()
 
 		// launch hello kernel
 		std::cout << "calling 'hello' kernel" << std::endl;
-		cl::CommandQueue queue(context, devices[0], 0, &err);
+		cl::CommandQueue queue(context, devices[deviceId], 0, &err);
 		queue.enqueueNDRangeKernel(
 			kernel,
 			cl::NullRange,
@@ -103,12 +126,10 @@ void initOCL()
 	}
 	catch (cl::Error err)
 	{
-		// error handling
-		// if the kernel has failed to compile, print the error log
 		std::string s;
-		program.getBuildInfo(devices[0], CL_PROGRAM_BUILD_LOG, &s);
+		program.getBuildInfo(devices[deviceId], CL_PROGRAM_BUILD_LOG, &s);
 		std::cout << s << std::endl;
-		program.getBuildInfo(devices[0], CL_PROGRAM_BUILD_OPTIONS, &s);
+		program.getBuildInfo(devices[deviceId], CL_PROGRAM_BUILD_OPTIONS, &s);
 		std::cout << s << std::endl;
 		std::cerr << "ERROR: " << err.what() << "(" << err.err() << ")" << std::endl;
 	}
@@ -125,7 +146,7 @@ void runOCL(const char* fileI, const char* fileO, unsigned int generations, unsi
 	// init grid from file
 	// TODO: fill datastructure
 
-	initOCL();
+	initOCL(platformId, deviceId);
 	Timing::getInstance()->stopSetup();
 
 	Timing::getInstance()->startComputation();
