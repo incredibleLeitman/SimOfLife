@@ -163,8 +163,8 @@ void runSeq(const char* fileI, const char* fileO, unsigned int generations)
     std::string str;
 #endif
 
-    int row = 0;
-    int col = 0;
+    unsigned int row = 0;
+    unsigned int col = 0;
     unsigned int idx = 0;
     char value = 0;
     unsigned int countNeighbours = 0;

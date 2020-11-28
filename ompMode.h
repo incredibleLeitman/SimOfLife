@@ -149,6 +149,9 @@ void runOMP(const char* fileI, const char* fileO, unsigned int generations, int 
     if (threads != num_threads) omp_set_num_threads(threads);
     std::cout << "number of processors: " << omp_get_num_procs() << ", set number of threads: " << threads << std::endl;
 
+    // index variable must have signed type
+    int height = (int)h;
+    int elems = (int)total_elem_count;
     int row = 0;
     int col = 0;
     int idx = 0;
@@ -168,7 +171,8 @@ void runOMP(const char* fileI, const char* fileO, unsigned int generations, int 
         // need to get current neighbour count, because other than seqMode updates are not diffs but full states
         // first handle all cells without border mapping, afterwards special handling
 #pragma omp parallel for shared(neighbours) private(row, col) // TEST: use this and no inner loop: Win: 4631.35ms, Ubuntu 7405.71ms
-        for (row = 0; row < h; row++)
+//#pragma omp parallel for collapse(2) shared(neighbours) private(row, col) // TEST: use this and no inner loop: Win: 4631.35ms, Ubuntu 7405.71ms
+        for (row = 0; row < height; row++)
         {
             yOffTop = (row == 0) ? col_bot : -(int)w;
             yOffBot = (row == (h - 1)) ? -col_bot : w;
@@ -191,7 +195,7 @@ void runOMP(const char* fileI, const char* fileO, unsigned int generations, int 
 
         // change cells dependent on oldCells
 #pragma omp parallel for shared(cells) private(idx)
-        for (idx = 0; idx < total_elem_count; ++idx)
+        for (idx = 0; idx < elems; ++idx)
         {
             value = *(cells + idx);
             countNeighbours = *(neighbours + idx);
