@@ -83,8 +83,6 @@ int main(int argc, char** argv)
     }
     else if (mode == "ocl")
     {
-        //if (platformId == 0) // TODO: auto select platform
-        //if (deviceId == 0) // TODO: auto select device
         runOCL(fileI, fileO, generations, platformId, deviceId);
     }
 
