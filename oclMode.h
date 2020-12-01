@@ -13,9 +13,8 @@
 
 const std::string KERNEL_FILE = "kernel.cl";
 
-
 cl::Buffer boardBuffer;
-cl::Buffer tempBoardBuffer;
+cl::Buffer cacheBuffer;
 cl::Kernel kernel;
 cl::CommandQueue queue;
 
@@ -108,7 +107,7 @@ void initOCL(unsigned int platformId, unsigned int deviceId)
 		// get available platforms ( NVIDIA, Intel, AMD,...)
 		std::vector<cl::Platform> platforms;
 		cl::Platform::get(&platforms);
-		if (platforms.size() == 0 || platforms.size() < platformId) throw "specified OpenCL platform not available!\n";
+		if (platforms.size() == 0 || platforms.size() < platformId) throw "specified OpenCL platform not available!";
 
 #ifdef _DEBUG
 		// test output to gather information about installed hardware:
@@ -136,13 +135,13 @@ void initOCL(unsigned int platformId, unsigned int deviceId)
 		std::cout << "using platform: " << platform.getInfo<CL_PLATFORM_NAME>() << "\n";
 
 		platform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
-		if (devices.size() == 0 || devices.size() < deviceId) throw "specified OpenCL device not available!\n";
+		if (devices.size() == 0 || devices.size() < deviceId) throw "specified OpenCL device not available!";
 
 		cl::Device device = devices[deviceId];
 		std::cout << "using device: " << device.getInfo<CL_DEVICE_NAME>() << "\n";
 
 		cl::Context context({ device });
-		cl::Program::Sources sources;
+	 	cl::Program::Sources sources;
 
 		// load and build the kernel
 		std::ifstream sourceFile(KERNEL_FILE);
@@ -157,15 +156,14 @@ void initOCL(unsigned int platformId, unsigned int deviceId)
 		if (program.build({ device }) != CL_SUCCESS) std::cerr << " Error building: " << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device) << std::endl;
 
 		// init buffer and Kernel
-		boardBuffer = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(int) * total_elem_count);
-		tempBoardBuffer = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(int) * total_elem_count);
+		boardBuffer = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(unsigned char) * total_elem_count);
+		cacheBuffer = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(unsigned char) * total_elem_count);
 		
 		kernel = cl::Kernel(program, "gol_generation");
 
 		queue = cl::CommandQueue(context, device);
 		queue.enqueueWriteBuffer(boardBuffer, CL_TRUE, 0, sizeof(unsigned char) * total_elem_count, cells);
-		queue.enqueueWriteBuffer(tempBoardBuffer, CL_TRUE, 0, sizeof(int) * total_elem_count, neighbours);
-
+		queue.enqueueWriteBuffer(cacheBuffer, CL_TRUE, 0, sizeof(unsigned char) * total_elem_count, oldCells);
 	}
 	catch (cl::Error err)
 	{
@@ -189,12 +187,11 @@ void runOCL(const char* fileI, const char* fileO, unsigned int generations, unsi
 	Timing::getInstance()->startSetup();
 	ompReadFromFile(fileI);
 
-	// make an array for saving neighbour count for each cell
-	neighbours = new int[total_elem_count];
+	// make an array for saving previous state
+	oldCells = new unsigned char[total_elem_count];
 
 	initOCL(platformId, deviceId);
 
-	bool useTemp = false;
 	unsigned int gen = 0;
 	Timing::getInstance()->stopSetup();
 
@@ -202,15 +199,16 @@ void runOCL(const char* fileI, const char* fileO, unsigned int generations, unsi
 	for (gen = 0; gen < generations; gen++)
 	{
 		kernel.setArg(0, boardBuffer);
-		kernel.setArg(1, tempBoardBuffer);
-		kernel.setArg(2, cl_int(useTemp));
-		kernel.setArg(3, cl_int(w));
-		kernel.setArg(4, cl_int(h));
+		kernel.setArg(1, cacheBuffer);
+		kernel.setArg(2, w);
+		kernel.setArg(3, h);
+
 		queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(total_elem_count), cl::NullRange);
 		queue.finish();
+
+		std::swap(boardBuffer, cacheBuffer);
 	}
 	// read back current board state
-	//queue.enqueueReadBuffer(boardBuffer, CL_TRUE, 0, sizeof(int) * total_elem_count, cells);
 	queue.enqueueReadBuffer(boardBuffer, CL_TRUE, 0, sizeof(unsigned char) * total_elem_count, cells);
 	Timing::getInstance()->stopComputation();
 
