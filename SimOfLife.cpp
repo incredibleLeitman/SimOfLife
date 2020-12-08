@@ -31,6 +31,7 @@
 #include <cstring> // memcpy for g++
 #endif
 
+#define SILENT_MODE
 //#define DEBUG_OUT
 //#define USE_STEPS // wait for user input to perform next step
 //#define SHOW_GENS // prints every generation
@@ -51,10 +52,11 @@ int main(int argc, char** argv)
     std::string path("out" + std::to_string(generations) + ".out");
     const char* fileO = path.c_str();           // --save - filename with the extension ’.gol’
     bool printMeasure = true;                   // --mesaure - generates measurement output on stdout
-    std::string mode = "seq";                   // --mode - extended in Project 2: seq, omp, ocl
+    std::string mode = "seq";                   // --mode - seq, omp, ocl
     int threads = 8;                            // --threads - amount of threads to use for omp
-    int platformId = 0;                         // --platformId - ocl
-    int deviceId = 0;                           // --deviceId - ocl
+    int platformId = 0;                         // --platformId - platform to use for ocl
+    int deviceId = 0;                           // --deviceId - device to use for ocl
+    debugOutput = false;                        // --debug
     for (int i = 0; i < argc; ++i)
     {
         //std::cout << "\t" << argv[i] << std::endl;
@@ -67,9 +69,14 @@ int main(int argc, char** argv)
             else if (strcmp(argv[i], "--measure") == 0) printMeasure = true;
             else if (strcmp(argv[i], "--mode") == 0) mode = argv[i + 1];
             else if (strcmp(argv[i], "--threads") == 0) threads = std::stoi(argv[i + 1]);
-            else if (strcmp(argv[i], "--device") == 0) ; // automatically selects platform & device -> handle as default
+            else if (strcmp(argv[i], "--device") == 0) // automatically selects platform & device -> handle as default
+            {
+                if (strcmp(argv[i + 1], "gpu") == 0) platformId = 0;
+                else if (strcmp(argv[i + 1], "gpu") == 0) platformId = 1;
+            }
             else if (strcmp(argv[i], "--platformId") == 0) platformId = std::stoi(argv[i + 1]);
             else if (strcmp(argv[i], "--deviceId") == 0) deviceId = std::stoi(argv[i + 1]);
+            else if (strcmp(argv[i], "--debug") == 0) debugOutput = true;
         }
     }
 
@@ -86,7 +93,8 @@ int main(int argc, char** argv)
         runOCL(fileI, fileO, generations, platformId, deviceId);
     }
 
-    if (printMeasure) Timing::getInstance()->print();
+    if (debugOutput) Timing::getInstance()->print();
+    if (printMeasure) std::cout << Timing::getInstance()->getResults() << std::endl;
 
     return EXIT_SUCCESS;
 }

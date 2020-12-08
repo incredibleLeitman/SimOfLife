@@ -3,6 +3,7 @@
 #include "common.h"
 
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
+#define CL_TARGET_OPENCL_VERSION 220
 #define __CL_ENABLE_EXCEPTIONS // to use cl::Error
 // adapted from opencltest
 // requirements: 
@@ -10,6 +11,7 @@
 // - CUDA Toolkit 9.0 (sets the environment variable CUDA_PATH)
 // - cl.hpp, the C++ bindings for OpenCL v 1.2
 #include <CL/cl.hpp>
+//#include <CL/cl.h>
 
 const std::string KERNEL_FILE = "kernel.cl";
 
@@ -20,7 +22,7 @@ cl::CommandQueue queue;
 
 void oclReadFromFile(const char* filePath)
 {
-	std::cout << "read file: " << filePath << "..." << std::endl;
+	if (debugOutput) std::cout << "read file: " << filePath << "..." << std::endl;
 	std::ifstream in(filePath);
 	if (in.is_open())
 	{
@@ -44,8 +46,8 @@ void oclReadFromFile(const char* filePath)
 		col_right = w - 1;
 		col_bot = total_elem_count - w;
 		row_bot = h - 1;
-		std::cout << "total: " << total_elem_count << ", w: " << w << ", h: " << h << std::endl;
-		std::cout << "col_right: " << col_right << ", col_bot: " << col_bot << ", row_bot: " << row_bot << std::endl;
+		if (debugOutput) std::cout << "total: " << total_elem_count << ", w: " << w << ", h: " << h << std::endl;
+		if (debugOutput) std::cout << "col_right: " << col_right << ", col_bot: " << col_bot << ", row_bot: " << row_bot << std::endl;
 
 		cells = new unsigned char[total_elem_count];
 		memset(cells, 0, total_elem_count);
@@ -68,7 +70,7 @@ void oclReadFromFile(const char* filePath)
 			}
 		}
 	}
-	else std::cout << "Error opening " << filePath << std::endl;
+	else std::cout << "error opening " << filePath << std::endl;
 
 	if (!in.eof() && in.fail())
 		std::cout << "error reading " << filePath << std::endl;
@@ -78,7 +80,7 @@ void oclReadFromFile(const char* filePath)
 
 void oclWriteToFile(const char* filePath, bool drawNeighbours = false)
 {
-	std::cout << "write file: " << filePath << "..." << std::endl;
+	if (debugOutput) std::cout << "write file: " << filePath << "..." << std::endl;
 	std::ofstream out(filePath);
 	if (out.is_open())
 	{
@@ -132,13 +134,13 @@ void initOCL(unsigned int platformId, unsigned int deviceId)
 
 		// create a context and get available devices
 		cl::Platform platform = platforms[platformId];
-		std::cout << "using platform: " << platform.getInfo<CL_PLATFORM_NAME>() << "\n";
+		if (debugOutput) std::cout << "using platform: " << platform.getInfo<CL_PLATFORM_NAME>() << "\n";
 
 		platform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
 		if (devices.size() == 0 || devices.size() < deviceId) throw "specified OpenCL device not available!";
 
 		cl::Device device = devices[deviceId];
-		std::cout << "using device: " << device.getInfo<CL_DEVICE_NAME>() << "\n";
+		if (debugOutput) std::cout << "using device: " << device.getInfo<CL_DEVICE_NAME>() << "\n";
 
 		cl::Context context({ device });
 	 	cl::Program::Sources sources;
@@ -179,9 +181,9 @@ void initOCL(unsigned int platformId, unsigned int deviceId)
 void runOCL(const char* fileI, const char* fileO, unsigned int generations, unsigned int platformId, unsigned int deviceId)
 {
 #ifdef _DEBUG
-	std::cout << "DEBUG" << std::endl;
+	if (debugOutput) std::cout << "DEBUG" << std::endl;
 #endif
-	std::cout << "running mode: ocl" << std::endl;
+	if (debugOutput) std::cout << "running mode: ocl" << std::endl;
 
 	// init grid from file
 	Timing::getInstance()->startSetup();

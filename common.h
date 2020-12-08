@@ -16,3 +16,5 @@ int row_bot;        // defines last row (h - 1)
 unsigned char* cells;
 unsigned char* oldCells;    // used in seqMode as buffer
 int* neighbours;  // ompMode data centric design
+
+bool debugOutput = false; // flag for console output

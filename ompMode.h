@@ -48,7 +48,7 @@ inline int sumNeighbours(unsigned char* ptr_cell, int yOffTop, int yOffBot, int 
 
 void ompReadFromFile(const char* filePath)
 {
-    std::cout << "read file: " << filePath << "..." << std::endl;
+    if (debugOutput) std::cout << "read file: " << filePath << "..." << std::endl;
     std::ifstream in(filePath);
     if (in.is_open())
     {
@@ -72,8 +72,8 @@ void ompReadFromFile(const char* filePath)
         col_right = w - 1;
         col_bot = total_elem_count - w;
         row_bot = h - 1;
-        std::cout << "total: " << total_elem_count << ", w: " << w << ", h: " << h << std::endl;
-        std::cout << "col_right: " << col_right << ", col_bot: " << col_bot << ", row_bot: " << row_bot << std::endl;
+        if (debugOutput) std::cout << "total: " << total_elem_count << ", w: " << w << ", h: " << h << std::endl;
+        if (debugOutput) std::cout << "col_right: " << col_right << ", col_bot: " << col_bot << ", row_bot: " << row_bot << std::endl;
 
         cells = new unsigned char[total_elem_count];
         memset(cells, 0, total_elem_count);
@@ -96,7 +96,7 @@ void ompReadFromFile(const char* filePath)
             }
         }
     }
-    else std::cout << "Error opening " << filePath << std::endl;
+    else std::cout << "error opening " << filePath << std::endl;
 
     if (!in.eof() && in.fail())
         std::cout << "error reading " << filePath << std::endl;
@@ -106,7 +106,7 @@ void ompReadFromFile(const char* filePath)
 
 void ompWriteToFile(const char* filePath, bool drawNeighbours = false)
 {
-    std::cout << "write file: " << filePath << "..." << std::endl;
+    if (debugOutput) std::cout << "write file: " << filePath << "..." << std::endl;
     std::ofstream out(filePath);
     if (out.is_open())
     {
@@ -127,9 +127,9 @@ void ompWriteToFile(const char* filePath, bool drawNeighbours = false)
 void runOMP(const char* fileI, const char* fileO, unsigned int generations, int threads)
 {
 #ifdef _DEBUG
-    std::cout << "DEBUG" << std::endl;
+    if (debugOutput) std::cout << "DEBUG" << std::endl;
 #endif
-    std::cout << "running mode: omp" << std::endl;
+    if (debugOutput) std::cout << "running mode: omp" << std::endl;
 
     // init grid from file
     Timing::getInstance()->startSetup();
@@ -144,10 +144,10 @@ void runOMP(const char* fileI, const char* fileO, unsigned int generations, int 
     // the presence of the num_threads clause overrides both other values.
 
     //{200203,"2.0"},{200505,"2.5"},{200805,"3.0"},{201107,"3.1"},{201307,"4.0"},{201511,"4.5"},{201811,"5.0"}
-    std::cout << "OpenMP version: " << _OPENMP << std::endl;
+    if (debugOutput) std::cout << "OpenMP version: " << _OPENMP << std::endl;
     int num_threads = omp_get_num_threads();
     if (threads != num_threads) omp_set_num_threads(threads);
-    std::cout << "number of processors: " << omp_get_num_procs() << ", set number of threads: " << threads << std::endl;
+    if (debugOutput) std::cout << "number of processors: " << omp_get_num_procs() << ", set number of threads: " << threads << std::endl;
 
     // index variable must have signed type
     int height = (int)h;

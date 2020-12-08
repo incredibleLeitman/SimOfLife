@@ -66,7 +66,7 @@ inline void setCellState(unsigned char* ptr_cell, unsigned int x, unsigned int y
 
 void readFromFile(const char* filePath)
 {
-    std::cout << "read file: " << filePath << "..." << std::endl;
+    if (debugOutput) std::cout << "read file: " << filePath << "..." << std::endl;
     std::ifstream in(filePath);
     if (in.is_open())
     {
@@ -89,7 +89,8 @@ void readFromFile(const char* filePath)
         total_elem_count = w * h;
         col_right = w - 1;
         col_bot = total_elem_count - w;
-        std::cout << "total: " << total_elem_count << ", w: " << w << ", h: " << h << std::endl;
+        if (debugOutput) std::cout << "total: " << total_elem_count << ", w: " << w << ", h: " << h << std::endl;
+        if (debugOutput) std::cout << "col_right: " << col_right << ", col_bot: " << col_bot << ", row_bot: " << row_bot << std::endl;
 
         cells = new unsigned char[total_elem_count];
         memset(cells, 0, total_elem_count);
@@ -112,7 +113,7 @@ void readFromFile(const char* filePath)
             }
         }
     }
-    else std::cout << "Error opening " << filePath << std::endl;
+    else std::cout << "error opening " << filePath << std::endl;
 
     if (!in.eof() && in.fail())
         std::cout << "error reading " << filePath << std::endl;
@@ -143,9 +144,9 @@ void writeToFile(const char* filePath, bool drawNeighbours = false)
 void runSeq(const char* fileI, const char* fileO, unsigned int generations)
 {
 #ifdef _DEBUG
-    std::cout << "DEBUG" << std::endl;
+    if (debugOutput) std::cout << "DEBUG" << std::endl;
 #endif
-    std::cout << "running mode: seq" << std::endl;
+    if (debugOutput) std::cout << "running mode: seq" << std::endl;
 
     // init grid from file
     Timing::getInstance()->startSetup();
