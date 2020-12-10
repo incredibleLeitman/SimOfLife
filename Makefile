@@ -1,3 +1,4 @@
+# TODO: check os for platform dependent clean
 #ifeq ($(OS), Windows_NT)
 #	#EXECUTABLE=a.exe
 #else
@@ -5,16 +6,12 @@
 #endif
 
 CXX = g++
-CXXFLAGS = -Wall -O3 -fopenmp #-lOpenCL
-#TODO: https://stackoverflow.com/questions/7542808/how-to-compile-opencl-on-ubuntu
+CXXFLAGS = -Wall -O3 -fopenmp
 LIB = -L"/mnt/c/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.1/lib/x64"
 INC = -I"/mnt/c/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.1/include"
 
-default: main
-
-main: SimOfLife.cpp Timing.cpp
-	#$(CXX) $(CXXFLAGS) $(LIB) $(INC) -c SimOfLife.cpp Timing.cpp
-	$(CXX) $(CXXFLAGS) $(LIB) $(INC) SimOfLife.cpp Timing.cpp
+SimOfLife: SimOfLife.cpp Timing.cpp
+	$(CXX) $(CXXFLAGS) $(INC) $(LIB) -o SimOfLife SimOfLife.cpp Timing.cpp -lOpenCL
 
 clean:
 	#del SimOfLife.exe SimOfLife
