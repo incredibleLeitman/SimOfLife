@@ -123,7 +123,7 @@ void readFromFile(const char* filePath)
 
 void writeToFile(const char* filePath, bool drawNeighbours = false)
 {
-    std::cout << "write file: " << filePath << "..." << std::endl;
+    if (debugOutput) std::cout << "write file: " << filePath << "..." << std::endl;
     std::ofstream out(filePath);
     if (out.is_open())
     {
