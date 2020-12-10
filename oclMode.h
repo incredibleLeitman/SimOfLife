@@ -100,7 +100,6 @@ void oclWriteToFile(const char* filePath, bool drawNeighbours = false)
 
 void initOCL(unsigned int platformId, unsigned int deviceId)
 {
-	cl_int err = CL_SUCCESS;
 	cl::Program program;
 	std::vector<cl::Device> devices;
 
