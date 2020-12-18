@@ -159,10 +159,11 @@ void initOCL(unsigned int platformId, unsigned int deviceId)
 		// init buffer and Kernel
 		boardBuffer = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(unsigned char) * total_elem_count);
 		cacheBuffer = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(unsigned char) * total_elem_count);
-		
+
 		kernel = cl::Kernel(program, "gol_generation");
 
 		queue = cl::CommandQueue(context, device);
+		// TODO: check for Copy/Read Buffer
 		queue.enqueueWriteBuffer(boardBuffer, CL_TRUE, 0, sizeof(unsigned char) * total_elem_count, cells);
 		queue.enqueueWriteBuffer(cacheBuffer, CL_TRUE, 0, sizeof(unsigned char) * total_elem_count, oldCells);
 	}
@@ -204,6 +205,7 @@ void runOCL(const char* fileI, const char* fileO, unsigned int generations, unsi
 		kernel.setArg(2, w);
 		kernel.setArg(3, h);
 
+		// TODO: check if needed every gen?
 		queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(total_elem_count), cl::NullRange);
 		queue.finish();
 

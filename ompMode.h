@@ -219,6 +219,8 @@ void runOMP(const char* fileI, const char* fileO, unsigned int generations, int 
 
             // alternative option: always set value
             *(cells + idx) = (countNeighbours == 3) + value * (countNeighbours == 2);
+            // TODO: check if logical operators are even faster?
+            //*(cells + idx) = (countNeighbours == 3) | value & (countNeighbours == 2);
         }
     }
 
